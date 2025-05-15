@@ -66,3 +66,7 @@ include/
 # Ignore ZIPs and output
 *.zip
 *.tar
+.venv/
+**/venv/
+__pycache__/
+*.pyc
