@@ -7,19 +7,62 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Dependency folders
+node_modules/
+venv/
+.venv/
+env/
+ENV/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+*.egg-info/
+.eggs/
+
+# Vite / React / Build Output
+dist/
+build/
+dist-ssr/
+.vite/
+.vitepress/
+
+# Local env files
+.env
+.env.local
+.env.*.local
 *.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# macOS / OS-specific
 .DS_Store
+
+# IDE/editor files
+.vscode/
+!.vscode/extensions.json
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-.env
+
+# Python virtualenv binaries (if inside project)
+bin/
+lib/
+lib64/
+include/
+
+# Cache
+.cache/
+.parcel-cache/
+*.tsbuildinfo
+
+# Ignore ML model binaries or Torch libraries
+**/site-packages/torch/lib/libtorch_cpu.dylib
+**/torch/lib/*.dylib
+**/*.pt
+**/*.pth
+**/*.onnx
+
+# Ignore ZIPs and output
+*.zip
+*.tar
