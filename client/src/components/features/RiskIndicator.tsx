@@ -17,7 +17,7 @@ const RiskIndicator: React.FC<RiskIndicatorProps> = ({
   className = '',
 }) => {
   const getConfig = () => {
-    switch (level) {
+    switch (level?.toLowerCase()) {
       case 'high':
         return {
           icon: <AlertCircle />,
@@ -46,25 +46,32 @@ const RiskIndicator: React.FC<RiskIndicatorProps> = ({
           bgColor: 'bg-success-50',
           label: 'No Risk',
         };
+      default:
+        return null;
     }
   };
-  
-  const { icon, color, bgColor, label } = getConfig();
-  
+
+  const config = getConfig();
+  if (!config) return null;
+
+  const { icon, color, bgColor, label } = config;
+
   const sizeClasses = {
     sm: 'text-xs',
     md: 'text-sm',
     lg: 'text-base',
   };
-  
+
   const iconSizes = {
     sm: 'h-3.5 w-3.5',
     md: 'h-4 w-4',
     lg: 'h-5 w-5',
   };
-  
+
   return (
-    <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${bgColor} ${sizeClasses[size]} ${className}`}>
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${bgColor} ${sizeClasses[size]} ${className}`}
+    >
       <span className={`${color} ${iconSizes[size]}`}>{icon}</span>
       {showLabel && <span className={`font-medium ${color}`}>{label}</span>}
     </div>

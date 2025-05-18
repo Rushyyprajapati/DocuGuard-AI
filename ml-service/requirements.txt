@@ -2,14 +2,14 @@ annotated-types==0.7.0
 anyio==4.9.0
 certifi==2025.4.26
 charset-normalizer==3.4.2
-click==8.2.0
+click==8.1.8
 fastapi==0.115.12
 filelock==3.18.0
 fsspec==2025.3.2
 h11==0.16.0
 huggingface-hub==0.31.2
 idna==3.10
-numpy==2.2.5
+numpy==2.0.2
 packaging==25.0
 pydantic==2.11.4
 pydantic_core==2.33.2
@@ -26,3 +26,4 @@ typing-inspection==0.4.0
 typing_extensions==4.13.2
 urllib3==2.4.0
 uvicorn==0.34.2
+torch==2.3.0
