@@ -7,38 +7,56 @@ const path = require('path');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const { OpenAI } = require('openai');
-require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+require('dotenv').config();
 
 const app = express();
 
-// ✅ Load env
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL?.replace(/\/$/, '');
+// ✅ ENV VARIABLES
+const ML_SERVICE_URL = (process.env.ML_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const PORT = process.env.PORT || 5050;
 
-if (!ML_SERVICE_URL || !OPENAI_API_KEY) {
-  console.error('❌ Missing ML_SERVICE_URL or OPENAI_API_KEY in .env');
+if (!OPENAI_API_KEY) {
+  console.error('❌ Missing OPENAI_API_KEY');
   process.exit(1);
 }
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-// ✅ Middleware
+// ✅ CORS FIX (important for Vercel)
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   credentials: true,
 }));
+
 app.use(express.json());
+
+// ✅ Ensure uploads folder exists (Render fix)
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // ✅ Multer setup
 const storage = multer.diskStorage({
-  destination: 'uploads/',
+  destination: uploadsDir,
   filename: (_req, file, cb) => {
     cb(null, `${Date.now()}-${file.originalname}`);
   },
 });
+
 const upload = multer({ storage });
 
 // ✅ Cache
@@ -63,21 +81,29 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       const result = await mammoth.extractRawText({ buffer: fileBuffer });
       extractedText = result.value;
     } else {
-      return res.status(400).json({ error: 'Unsupported file type. Only PDF and DOCX allowed.' });
+      return res.status(400).json({ error: 'Only PDF and DOCX allowed.' });
     }
 
     console.log('📄 Uploaded:', absolutePath);
-    res.status(200).json({ message: 'File uploaded', filePath: absolutePath, extractedText });
+
+    res.status(200).json({
+      message: 'File uploaded',
+      extractedText,
+    });
+
   } catch (err) {
     console.error('❌ Extraction error:', err.message);
-    res.status(500).json({ error: 'Failed to extract text from document' });
+    res.status(500).json({ error: 'Failed to extract text' });
   }
 });
 
-// ✅ Analyze endpoint (ML service)
+// ✅ Analyze endpoint
 app.post('/analyze', async (req, res) => {
   const { text } = req.body;
-  if (!text || text.length < 10) return res.status(400).json({ error: 'Invalid document text.' });
+
+  if (!text || text.length < 10) {
+    return res.status(400).json({ error: 'Invalid text' });
+  }
 
   try {
     const [summaryRes, nerRes, classifyRes] = await Promise.all([
@@ -90,57 +116,69 @@ app.post('/analyze', async (req, res) => {
     cachedClauses = classifyRes.data.classification;
     cachedRiskData = classifyRiskData(cachedClauses);
 
-    res.status(200).json({
+    res.json({
       summary: cachedSummary,
       entities: nerRes.data.entities,
       classification: cachedClauses,
     });
+
   } catch (err) {
     console.error('❌ Analyze error:', err.message);
-    res.status(500).json({ error: 'Failed to analyze document', detail: err.message });
+    res.status(500).json({ error: 'Analysis failed', detail: err.message });
   }
 });
 
-// ✅ GPT-powered Chat Assistant
+// ✅ Chat endpoint (OpenAI)
 app.post('/chat', async (req, res) => {
   const { question, context } = req.body;
-  if (!question || !context) return res.status(400).json({ error: 'Missing question or context.' });
+
+  if (!question || !context) {
+    return res.status(400).json({ error: 'Missing question/context' });
+  }
 
   try {
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
-        { role: 'system', content: 'You are a legal document assistant who explains legal terms and risks clearly.' },
-        { role: 'user', content: `Context:\n${context}\n\nQuestion:\n${question}` }
+        {
+          role: 'system',
+          content: 'You are a legal assistant who explains contracts clearly.'
+        },
+        {
+          role: 'user',
+          content: `Context:\n${context}\n\nQuestion:\n${question}`
+        }
       ],
       temperature: 0.7,
     });
 
-    const reply = completion.choices[0].message.content;
-    res.status(200).json({ answer: reply });
+    res.json({
+      answer: completion.choices[0].message.content
+    });
+
   } catch (err) {
-    console.error('❌ GPT error:', err.message);
-    res.status(500).json({ error: 'Failed to get assistant response.' });
+    console.error('❌ OpenAI error:', err.message);
+    res.status(500).json({ error: 'Chat failed' });
   }
 });
 
-// ✅ Frontend API
+// ✅ APIs for frontend
 app.get('/api/summary', (req, res) => {
-  if (!cachedSummary) return res.status(404).json({ error: 'Summary not available' });
+  if (!cachedSummary) return res.status(404).json({ error: 'No summary' });
   res.json(cachedSummary);
 });
 
 app.get('/api/clauses', (req, res) => {
-  if (!cachedClauses.length) return res.status(404).json({ error: 'Clauses not available' });
+  if (!cachedClauses.length) return res.status(404).json({ error: 'No clauses' });
   res.json(cachedClauses);
 });
 
 app.get('/api/risk-data', (req, res) => {
-  if (!cachedRiskData.length) return res.status(404).json({ error: 'Risk data not available' });
+  if (!cachedRiskData.length) return res.status(404).json({ error: 'No risk data' });
   res.json(cachedRiskData);
 });
 
-// ✅ Risk classifier (used by charts + UI)
+// ✅ Risk logic
 function classifyRiskData(clauses) {
   const levels = {
     'High Risk': { count: 0, color: '#ef4444' },
@@ -150,14 +188,15 @@ function classifyRiskData(clauses) {
   };
 
   clauses.forEach((clause) => {
-    const rawLabel = clause.riskLevel?.toLowerCase() || '';
-    const labels = rawLabel.split(/[\s,;|]+/);
+    const raw = clause.riskLevel?.toLowerCase() || '';
+    const parts = raw.split(/[\s,;|]+/);
 
-    labels.forEach((emotion) => {
+    parts.forEach((p) => {
       let level = 'No Risk';
-      if (emotion.includes('anger') || emotion.includes('fear')) level = 'High Risk';
-      else if (emotion.includes('sad') || emotion.includes('surprise')) level = 'Medium Risk';
-      else if (emotion.includes('joy') || emotion.includes('neutral')) level = 'Low Risk';
+      if (p.includes('anger') || p.includes('fear')) level = 'High Risk';
+      else if (p.includes('sad') || p.includes('surprise')) level = 'Medium Risk';
+      else if (p.includes('joy') || p.includes('neutral')) level = 'Low Risk';
+
       levels[level].count += 1;
     });
   });
@@ -168,7 +207,7 @@ function classifyRiskData(clauses) {
   }));
 }
 
-// ✅ Server start
+// ✅ Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
